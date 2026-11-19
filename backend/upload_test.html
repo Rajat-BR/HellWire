@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HellWire</title>
+</head>
+<body>
+    <h1>HellWire</h1>
+    <p>Direct file transfer test</p>
+
+        <input type="file" id="fileInput">
+        <br><br>
+
+        <button onclick="uploadFile()">Upload File</button>
+
+        <p id="status">Select a file to begin.</p>
+
+        <script>
+            async function uploadFile() {
+                const file = document.getElementById("fileInput").files[0];
+                const status = document.getElementById("status");
+
+                if (!file) {
+                    status.innerText = "Please select a file first.";
+                    return;
+                }
+
+                status.innerText = "Uploading...";
+
+                try {
+                    const response = await fetch(
+                        `/upload-stream?filename=${encodeURIComponent(file.name)}`,
+                        {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/octet-stream"
+                            },
+                            body: file
+                        }
+                    );
+
+                    const result = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(result.detail || "Upload failed");
+                    }
+
+                    status.innerText =
+                        "Upload successful!\n" +
+                        JSON.stringify(result, null, 2);
+
+                } catch (error) {
+                    status.innerText = "Error: " + error.message;
+                }
+            }
+        </script>
+</body>
+</html>

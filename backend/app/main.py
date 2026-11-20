@@ -1,3 +1,4 @@
+import os
 import uuid
 from pathlib import Path
 from fastapi.responses import HTMLResponse
@@ -5,7 +6,7 @@ from fastapi.responses import HTMLResponse
 from fastapi import FastAPI, File, HTTPException, UploadFile, Request
 
 app = FastAPI()
-UPLOAD_DIR = Path("receieved_files")
+UPLOAD_DIR = Path("received_files")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 MAX_UPLOAD_SIZE = 1024 * 1024 * 1024  #1GB
@@ -71,7 +72,7 @@ async def upload_stream(request: Request, filename: str):
     filename = filename.replace("\\", "/")
     filename = Path(filename).name
 
-    if filename in {".", "..", ""}:
+    if filename in {".", "..", ""} or '\x00' in filename:
         raise HTTPException(status_code=400, detail="Invalid Filename")
 
     #2. Generate Unique Filename
@@ -87,19 +88,35 @@ async def upload_stream(request: Request, filename: str):
         with temp_path.open("xb") as output:
 
             async for chunk in request.stream():
-                print("Received chunk:", len(chunk), "bytes")
-                total_bytes += len(chunk)
+
+                if not chunk:
+                    continue
+
+                # 4. Enforce upload size limit
+                if total_bytes + len(chunk) > MAX_UPLOAD_SIZE:
+                    raise HTTPException(status_code=413, detail="File exceeds maximum upload size")
+
                 output.write(chunk)
-                print("Total received:", total_bytes)
+                total_bytes += len(chunk)
 
-            # 4. Enforce upload size limit
-            if total_bytes > MAX_UPLOAD_SIZE:
-                raise HTTPException(status_code=413, detail="File exceeds maximum upload size")
+        # 5. Finalization Section
 
-            output.write(chunk)
+        counter = 0
+        while True:
+            if counter == 0:
+                candidate = UPLOAD_DIR / filename
+            else:
+                original = Path(filename)
+                new_name = f"{original.stem} ({counter}){original.suffix}"
+                candidate = UPLOAD_DIR / new_name
 
-        # Finalize the upload
-        temp_path.replace(final_path)
+            try:
+                os.link(temp_path, candidate)
+                final_path = candidate
+                break
+
+            except FileExistsError:
+                counter += 1
 
     except HTTPException:
         raise
@@ -115,7 +132,6 @@ async def upload_stream(request: Request, filename: str):
 
     return {
         "message": "File uploaded successfully",
-        "filename": filename,
-        "stored_as": final_path.name,
+        "filename": final_path.name,
         "size_bytes": total_bytes
     }

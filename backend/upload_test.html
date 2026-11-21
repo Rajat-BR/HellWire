@@ -30,7 +30,7 @@
 
                 try {
                     const response = await fetch(
-                        `/upload-stream?filename=${encodeURIComponent(file.name)}`,
+                        `/upload?filename=${encodeURIComponent(file.name)}`,
                         {
                             method: "POST",
                             headers: {
